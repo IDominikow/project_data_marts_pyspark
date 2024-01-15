@@ -21,3 +21,10 @@
 Внутри `src` расположены две папки:
 - `/src/dags`;
 - `/src/sql`.
+
+### Структура DataLake
+	/user/{username}/data/geo/events - ODS данные
+	/user/{username}/data/geo/analytics - директория с витринами
+	/user/{username}/data/checkpoints - директория для чекпоинтов, очищается после каждой отработки DAG
+	/user/{username}/data/geo/guides - директория справочниками городов и таймзон
+
