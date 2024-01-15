@@ -130,9 +130,9 @@ class GeoTransformer:
         #Находим пересечечения в списках каналов юзеров в паре
         #Удаляем пары без пересечения
         geo_users_wchannel_wout_message = geo_pairs_wout_message\
-            .join(geo_user_channels,geo_pairs_wout_message.user_id_1==geo_user_channels.chan_user_id,how='inner')\
+            .join(geo_user_channels,F.col('user_id_1')==geo_user_channels.chan_user_id,how='inner')\
             .selectExpr('user_id_1','user_id_2','channel_array as channel_arr_1')\
-            .join(geo_user_channels,geo_pairs_wout_message.user_id_2==geo_user_channels.chan_user_id,how='inner')\
+            .join(geo_user_channels,F.col('user_id_2')==geo_user_channels.chan_user_id,how='inner')\
             .withColumn('arr_intersect',F.array_intersect(F.col('channel_arr_1'),F.col('channel_array')))\
             .filter(F.size(F.col('arr_intersect'))!=0)\
             .select('user_id_1','user_id_2')
