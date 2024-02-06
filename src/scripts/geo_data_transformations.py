@@ -12,7 +12,6 @@ import pyspark.sql.functions as F
 import pyspark.sql.window as Window
 import datetime
 import geo_utils as gu
-import math
 
 
 class GeoTransformer:
@@ -22,13 +21,12 @@ class GeoTransformer:
 
     def calculate_events_nearest_city(self,geo_events, geo_cities, appendRegistrationEvent = False, onlyMessage = False):
     
-        pi_rad = math.pi/180
         if onlyMessage: #Если True - расчитываем только по последним сообщениям для 1й витрины
 
             #Переводим градусы в радианы
             geo_events_rad = geo_events\
-                .withColumn("lat_rad",(geo_events.lat)*pi_rad)\
-                .withColumn("lon_rad",(geo_events.lon)*pi_rad)\
+                .withColumn("lat_rad",F.radians('lat'))\
+                .withColumn("lon_rad",F.radians('lon'))\
                 .selectExpr("event.message_from as user_id",'date as date','event.datetime as datetime', "event.message_id as message_id","lat_rad", "lon_rad")
 
             #Делаем cross join с таблицей городов и расчитываем расстояние между городом и координатами event
@@ -49,12 +47,12 @@ class GeoTransformer:
             geo_events_rad = geo_events.selectExpr('event.message_from as user_id','event.datetime as datetime','event.reaction_from as react_user'\
                                 ,'event.user as usr', 'lat', 'lon', 'date', 'event_type')\
                 .withColumn('user_id',F.concat_ws('','usr','user_id','react_user').cast('long'))\
-                .withColumn('event_lat_rad', (F.regexp_replace('lat',',','.').cast("double"))*pi_rad)\
-                .withColumn('event_lon_rad', (F.regexp_replace('lon',',','.').cast("double"))*pi_rad)\
+                .withColumn('event_lat_rad', F.radians('lat'))\
+                .withColumn('event_lon_rad', F.radians('lon'))\
                 .drop('lat').drop('lon').drop('react_user').drop('usr').checkpoint()
             
             
-            if appendRegistrationEvent:#Если True - добавляем в DataFrame событие "ragistration"
+            if appendRegistrationEvent:#Если True - добавляем в DataFrame событие "registration"
 
                 geo_registration = geo_events_rad\
                     .withColumn("date_row_num",F.row_number()\
@@ -88,7 +86,7 @@ class GeoTransformer:
                             +F.cos('event_lat_rad')*F.cos('city_lat_rad')\
                             *(F.pow(F.sin((F.col('city_lon_rad') - F.col('event_lon_rad'))/F.lit(2)),2))                            
                             ))))\
-                .select(["user_id",'date','datetime','event_type','row_num_temp',"zone_id","sphere_distance"])
+                .select(["user_id",'date','datetime','event_type','row_num_temp',"zone_id","sphere_distance",'event_lat_rad','event_lon_rad'])
         
             
             min_distance_window = Window.Window().partitionBy(['user_id','date','row_num_temp']).orderBy(F.asc('sphere_distance'))
@@ -115,7 +113,7 @@ class GeoTransformer:
         
         #Находим пары юзеров с сообщениями
         geo_user_pairs_message = geo_events.filter(F.col('event_type')=='message')\
-            .selectExpr('event.message_from as user_id_1','event.message_to as user_id_2').distinct()
+            .selectExpr('event.message_from as user_id','event.message_to as user_id_2').distinct()
         
         #Удаляем пары с сообщениями из общего пула
         geo_pairs_wout_message = geo_users_pairs_full.subtract(geo_user_pairs_message)
@@ -130,12 +128,12 @@ class GeoTransformer:
         #Находим пересечечения в списках каналов юзеров в паре
         #Удаляем пары без пересечения
         geo_users_wchannel_wout_message = geo_pairs_wout_message\
-            .join(geo_user_channels,F.col('user_id_1')==geo_user_channels.chan_user_id,how='inner')\
-            .selectExpr('user_id_1','user_id_2','channel_array as channel_arr_1')\
+            .join(geo_user_channels,F.col('user_id')==geo_user_channels.chan_user_id,how='inner')\
+            .selectExpr('user_id','user_id_2','channel_array as channel_arr_1')\
             .join(geo_user_channels,F.col('user_id_2')==geo_user_channels.chan_user_id,how='inner')\
             .withColumn('arr_intersect',F.array_intersect(F.col('channel_arr_1'),F.col('channel_array')))\
             .filter(F.size(F.col('arr_intersect'))!=0)\
-            .select('user_id_1','user_id_2')
+            .selectExpr('user_id as user_id_1','user_id_2')
         
         #Удаляем взаимные дубликаты в паре
         return geo_users_wchannel_wout_message\
