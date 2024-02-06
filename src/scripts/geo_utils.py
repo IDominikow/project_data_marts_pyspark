@@ -16,14 +16,11 @@ def input_paths(basic_input_path: str, date: str, depth: str, IsAllEvents: bool,
     return [f"{basic_input_path}/date={(dt-datetime.timedelta(days=x)).strftime('%Y-%m-%d')}{event_str}" for x in range(int(depth))]
 
 def get_cities(spark : SparkSession, path: str, filename: str):
-
-    pi_rad = math.pi/180
-
     return spark.read.option("delimiter", ";")\
             .option("header", True)\
             .csv(path+filename)\
-            .withColumn('lat', (F.regexp_replace('lat',',','.').cast("double"))*pi_rad)\
-            .withColumn('lng', (F.regexp_replace('lng',',','.').cast("double"))*pi_rad)\
+            .withColumn('lat', F.radians('lat'))\
+            .withColumn('lng', F.radians('lng'))\
             .selectExpr(['id as zone_id','city', 'lat as city_lat_rad','lng as city_lon_rad'])
 
 def get_timezones(spark : SparkSession, path: str, filename: str):
